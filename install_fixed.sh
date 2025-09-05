@@ -8,7 +8,7 @@ yum install -y python3 python3-pip curl
 pip3 install requests
 
 # Create proper SOCKS5 proxy script
-cat > /root/socks5_proxy.py << 'EOF'
+cat > /root/socks5_proxy.py << 'SOCKS_EOF'
 import socket
 import threading
 import requests
@@ -146,10 +146,10 @@ class RealSOCKS5Proxy:
 if __name__ == "__main__":
     proxy = RealSOCKS5Proxy()
     proxy.start()
-EOF
+SOCKS_EOF
 
 # Create systemd service
-cat > /etc/systemd/system/socks5-proxy.service << 'EOF'
+cat > /etc/systemd/system/socks5-proxy.service << 'SERVICE_EOF'
 [Unit]
 Description=Real SOCKS5 Proxy Service
 After=network.target
@@ -166,7 +166,7 @@ TimeoutSec=30
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICE_EOF
 
 # Fix permissions
 chmod +x /root/socks5_proxy.py
@@ -187,4 +187,3 @@ iptables -I INPUT -p tcp --dport 1337 -j ACCEPT 2>/dev/null || true
 
 echo "[+] Proxy should be working now!"
 echo "[+] Test with: curl --socks5 127.0.0.1:1337 http://ifconfig.me"
-EOF
