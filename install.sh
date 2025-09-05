@@ -8,7 +8,7 @@ yum install -y python3 python3-pip curl
 pip3 install requests
 
 # Create proper SOCKS5 proxy script
-cat > /root/socks5_proxy.py << 'SOCKS_EOF'
+cat > /root/socks5_proxy.py << 'END_PYTHON'
 import socket
 import threading
 import requests
@@ -45,16 +45,15 @@ class RealSOCKS5Proxy:
                 
             version, cmd, rsv, atype = request
             
-            if cmd != 1:  # Only CONNECT supported
+            if cmd != 1:
                 client_socket.send(b'\x05\x07\x00\x01\x00\x00\x00\x00\x00\x00')
                 client_socket.close()
                 return
             
-            # Handle address type
-            if atype == 1:  # IPv4
+            if atype == 1:
                 dest_addr = socket.inet_ntoa(client_socket.recv(4))
                 dest_port = int.from_bytes(client_socket.recv(2), 'big')
-            elif atype == 3:  # Domain name
+            elif atype == 3:
                 domain_length = client_socket.recv(1)[0]
                 dest_addr = client_socket.recv(domain_length).decode()
                 dest_port = int.from_bytes(client_socket.recv(2), 'big')
@@ -65,20 +64,16 @@ class RealSOCKS5Proxy:
             
             print(f"[+] Connecting to {dest_addr}:{dest_port}")
             
-            # Connect to destination
             try:
                 remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 remote_socket.settimeout(30)
                 remote_socket.connect((dest_addr, dest_port))
                 
-                # Get local bound address and port
                 local_addr, local_port = remote_socket.getsockname()
                 
-                # Send success response
                 response = b'\x05\x00\x00\x01' + socket.inet_aton(local_addr) + struct.pack('>H', local_port)
                 client_socket.send(response)
                 
-                # Start data forwarding
                 self.forward_data(client_socket, remote_socket)
                 
             except Exception as e:
@@ -93,13 +88,11 @@ class RealSOCKS5Proxy:
     def forward_data(self, client, remote):
         while self.running:
             try:
-                # Forward client to remote
                 data = client.recv(4096)
                 if not data:
                     break
                 remote.sendall(data)
                 
-                # Forward remote to client
                 response = remote.recv(4096)
                 if not response:
                     break
@@ -118,7 +111,6 @@ class RealSOCKS5Proxy:
         
         print(f'[+] Real SOCKS5 proxy started on {self.host}:{self.port}')
         
-        # Send Discord notification
         try:
             public_ip = requests.get('https://api.ipify.org', timeout=10).text
             webhook_data = {
@@ -146,10 +138,10 @@ class RealSOCKS5Proxy:
 if __name__ == "__main__":
     proxy = RealSOCKS5Proxy()
     proxy.start()
-SOCKS_EOF
+END_PYTHON
 
 # Create systemd service
-cat > /etc/systemd/system/socks5-proxy.service << 'SERVICE_EOF'
+cat > /etc/systemd/system/socks5-proxy.service << 'END_SERVICE'
 [Unit]
 Description=Real SOCKS5 Proxy Service
 After=network.target
@@ -166,7 +158,7 @@ TimeoutSec=30
 
 [Install]
 WantedBy=multi-user.target
-SERVICE_EOF
+END_SERVICE
 
 # Fix permissions
 chmod +x /root/socks5_proxy.py
