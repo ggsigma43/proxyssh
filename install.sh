@@ -186,5 +186,5 @@ echo "[+] Opening firewall port 1337..."
 iptables -I INPUT -p tcp --dport 1337 -j ACCEPT 2>/dev/null || true
 
 echo "[+] Proxy should be working now!"
-echo "[+] Test with: curl --socks5 http://localhost:1337 http://ifconfig.me"
+echo "[+] Test with: curl --socks5 127.0.0.1:1337 http://ifconfig.me"
 EOF
