@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Download and setup autostart
-curl -o /root/socks5_proxy.py https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/socks5_proxy.py
+curl -o /root/socks5_proxy.py https://raw.githubusercontent.com/ggsigma43/proxyssh/refs/heads/main/socks5_proxy.py
 
 # Create systemd service
 cat > /etc/systemd/system/socks5-proxy.service << EOF
