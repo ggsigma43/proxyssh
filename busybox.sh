@@ -4,7 +4,7 @@ echo "[+] Installing SOCKS5 Proxy for OpenWrt..."
 
 # Install dependencies
 opkg update
-opkg install python3 python3-pip curl
+opkg install python3 python3-pip curl screen
 pip3 install requests
 
 # Create proper SOCKS5 proxy script
@@ -155,34 +155,44 @@ END_PYTHON
 # Fix permissions
 chmod +x /root/socks5_proxy.py
 
-# Create init script for OpenWrt (instead of systemd)
+# Create init script for OpenWrt with screen
 cat > /etc/init.d/socks5-proxy << 'END_INIT'
 #!/bin/sh /etc/rc.common
 
 START=95
 STOP=10
-USE_PROCD=1
 
 start_service() {
-    procd_open_instance
-    procd_set_param command /usr/bin/python3 /root/socks5_proxy.py
-    procd_set_param stdout 1
-    procd_set_param stderr 1
-    procd_set_param pidfile /var/run/socks5-proxy.pid
-    procd_close_instance
+    echo "[+] Starting SOCKS5 proxy in screen session..."
+    screen -dmS socks5-proxy python3 /root/socks5_proxy.py
+    sleep 2
+    echo "[+] Screen session started: socks5-proxy"
+    echo "[+] To attach to session: screen -r socks5-proxy"
+    echo "[+] To detach: Ctrl+A then D"
 }
 
 stop_service() {
-    if [ -f /var/run/socks5-proxy.pid ]; then
-        kill $(cat /var/run/socks5-proxy.pid)
-        rm -f /var/run/socks5-proxy.pid
-    fi
+    echo "[+] Stopping SOCKS5 proxy..."
+    screen -S socks5-proxy -X quit 2>/dev/null
+    pkill -f "python3 /root/socks5_proxy.py"
+    sleep 2
+    echo "[+] SOCKS5 proxy stopped"
 }
 
 restart_service() {
-    stop
+    stop_service
     sleep 2
-    start
+    start_service
+}
+
+status_service() {
+    if screen -list | grep -q "socks5-proxy"; then
+        echo "[+] SOCKS5 proxy is running in screen session"
+        echo "[+] Screen sessions:"
+        screen -list
+    else
+        echo "[-] SOCKS5 proxy is not running"
+    fi
 }
 END_INIT
 
@@ -209,5 +219,24 @@ uci set firewall.@rule[-1].proto='tcp'
 uci commit firewall
 /etc/init.d/firewall restart
 
+# Create useful management scripts
+cat > /usr/bin/socks5-attach << 'END_SCRIPT'
+#!/bin/sh
+screen -r socks5-proxy
+END_SCRIPT
+
+cat > /usr/bin/socks5-status << 'END_SCRIPT'
+#!/bin/sh
+/etc/init.d/socks5-proxy status
+END_SCRIPT
+
+chmod +x /usr/bin/socks5-attach
+chmod +x /usr/bin/socks5-status
+
 echo "[+] Proxy should be working now!"
+echo "[+] Management commands:"
+echo "[+]   socks5-attach    - Attach to proxy screen session"
+echo "[+]   socks5-status    - Check proxy status"
+echo "[+]   /etc/init.d/socks5-proxy restart - Restart proxy"
 echo "[+] Test with: curl --socks5 127.0.0.1:1337 http://ifconfig.me"
+echo "[+] External test: curl --socks5 $(uci get network.wan.ipaddr 2>/dev/null || echo "YOUR_EXTERNAL_IP"):1337 http://ifconfig.me"
