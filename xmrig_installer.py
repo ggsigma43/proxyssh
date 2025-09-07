@@ -83,7 +83,7 @@ class XMRigInstaller:
             print(f"[-] Extraction failed: {e}")
             return False
     
-    def create_config(self):
+def create_config(self):
     """Создаем конфигурационный файл для HashVault с автонастройкой памяти"""
     # Автоматически определяем доступную память
     try:
