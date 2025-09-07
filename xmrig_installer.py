@@ -84,47 +84,101 @@ class XMRigInstaller:
             return False
     
     def create_config(self):
-        """Создаем конфигурационный файл для HashVault"""
-        config = {
-            "autosave": True,
-            "cpu": True,
-            "opencl": False,
-            "cuda": False,
-            "pools": [
-                {
-                    "coin": "monero",
-                    "algo": "rx/0",
-                    "url": POOL_URL,
-                    "user": XMR_WALLET,
-                    "pass": "x",
-                    "tls": True,
-                    "keepalive": True,
-                    "nicehash": False
-                }
-            ],
-            "api": {
-                "port": 0,
-                "access-token": None,
-                "ipv6": False,
-                "restricted": True
-            },
-            "background": False,
-            "log-file": str(self.miner_dir / "xmrig.log"),
-            "print-time": 60,
-            "health-print-time": 60,
-            "retries": 5,
-            "retry-pause": 5
-        }
+    """Создаем конфигурационный файл для HashVault с автонастройкой памяти"""
+    # Автоматически определяем доступную память
+    try:
+        with open('/proc/meminfo', 'r') as f:
+            meminfo = f.read()
+        total_mem_kb = int([line for line in meminfo.split('\n') if 'MemTotal:' in line][0].split()[1])
+        total_mem_gb = total_mem_kb / 1024 / 1024
         
-        config_path = self.miner_dir / "config.json"
-        try:
-            with open(config_path, 'w') as f:
-                json.dump(config, f, indent=4)
-            print(f"[+] Config created: {config_path}")
-            return True
-        except Exception as e:
-            print(f"[-] Config creation failed: {e}")
-            return False
+        # Настройки в зависимости от доступной памяти
+        if total_mem_gb >= 16:
+            # Много RAM - используем 1GB pages и полный режим
+            rx_mode = "auto"
+            use_1gb_pages = True
+            memory_percent = 80  # Используем 80% памяти
+        elif total_mem_gb >= 8:
+            # Среднее количество RAM - balanced режим
+            rx_mode = "auto" 
+            use_1gb_pages = False
+            memory_percent = 70
+        elif total_mem_gb >= 4:
+            # Мало RAM - light режим
+            rx_mode = "light"
+            use_1gb_pages = False
+            memory_percent = 60
+        else:
+            # Очень мало RAM - ultra light режим
+            rx_mode = "light"
+            use_1gb_pages = False
+            memory_percent = 50
+            
+        print(f"[+] Detected {total_mem_gb:.1f} GB RAM, using {memory_percent}% for mining")
+        
+    except:
+        # Если не смогли определить память - безопасные настройки по умолчанию
+        rx_mode = "auto"
+        use_1gb_pages = False
+        memory_percent = 50
+        print("[+] Using default memory settings")
+
+    config = {
+        "autosave": True,
+        "cpu": True,
+        "opencl": False,
+        "cuda": False,
+        "randomx": {
+            "1gb-pages": use_1gb_pages,
+            "mode": rx_mode
+        },
+        "cpu": {
+            "max-threads-hint": 100,
+            "priority": 5,
+            "memory": memory_percent
+        },
+        "msr": True,
+        "huge-pages": True,
+        "pools": [
+            {
+                "coin": "monero",
+                "algo": "rx/0",
+                "url": POOL_URL,
+                "user": XMR_WALLET,
+                "pass": "x",
+                "tls": True,
+                "keepalive": True,
+                "nicehash": False
+            }
+        ],
+        "api": {
+            "port": 0,
+            "access-token": None,
+            "ipv6": False,
+            "restricted": True
+        },
+        "background": False,
+        "log-file": str(self.miner_dir / "xmrig.log"),
+        "print-time": 60,
+        "health-print-time": 60,
+        "retries": 5,
+        "retry-pause": 5,
+        "max-cpu-usage": 100,
+        "cpu-memory-pool": 1,
+        "dataset-host": False
+    }
+    
+    config_path = self.miner_dir / "config.json"
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=4)
+        print(f"[+] Config created: {config_path}")
+        print(f"[+] Memory settings: {rx_mode} mode, 1GB-pages: {use_1gb_pages}")
+        return True
+    except Exception as e:
+        print(f"[-] Config creation failed: {e}")
+        return False
+        
     
     def make_executable(self):
         """Делаем файлы исполняемыми"""
