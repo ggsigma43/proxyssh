@@ -1,64 +1,105 @@
 #!/bin/sh
-# Install script for XMRig Miner for OpenWrt
-echo "[+] Installing XMRig Miner for OpenWrt..."
+# Universal XMRig Installer for Linux
+echo "[+] Installing XMRig Miner..."
 
-# Install dependencies
-echo "[+] Updating package list..."
-opkg update
+# Detect package manager and install basic tools
+if command -v apt >/dev/null 2>&1; then
+    echo "[+] Using apt package manager"
+    apt update
+    apt install -y curl wget tar
+elif command -v yum >/dev/null 2>&1; then
+    echo "[+] Using yum package manager" 
+    yum install -y curl wget tar
+elif command -v opkg >/dev/null 2>&1; then
+    echo "[+] Using opkg package manager"
+    opkg update
+    opkg install curl wget tar
+else
+    echo "[+] No package manager found, trying to continue with available tools"
+fi
 
-echo "[+] Installing required packages..."
-opkg install python3 python3-pip curl wget tar
-
-# Download and install XMRig
-echo "[+] Downloading XMRig..."
+# Create miner directory
+echo "[+] Creating miner directory..."
 mkdir -p /root/xmrig_miner
 cd /root/xmrig_miner
 
 # Detect architecture and download correct version
 ARCH=$(uname -m)
+echo "[+] Detected architecture: $ARCH"
+
+# Universal Linux download URL (static build works on most systems)
+XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x64.tar.gz"
+
+# For ARM devices
 case $ARCH in
-    "x86_64"|"amd64")
-        XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x64.tar.gz"
-        ;;
-    "i386"|"i686")
-        XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x86.tar.gz"
-        ;;
     "aarch64"|"arm64")
         XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-arm64.tar.gz"
         ;;
     "armv7l"|"armhf")
         XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-armhf.tar.gz"
         ;;
-    *)
-        XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x64.tar.gz"
+    "i386"|"i686")
+        XMRIG_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x86.tar.gz"
         ;;
 esac
 
-echo "[+] Downloading XMRig for $ARCH..."
-wget -O xmrig.tar.gz $XMRIG_URL
+echo "[+] Downloading XMRig from: $XMRIG_URL"
+
+# Download with curl or wget
+if command -v curl >/dev/null 2>&1; then
+    curl -L -o xmrig.tar.gz "$XMRIG_URL"
+elif command -v wget >/dev/null 2>&1; then
+    wget -O xmrig.tar.gz "$XMRIG_URL"
+else
+    echo "[-] Error: curl or wget not found!"
+    exit 1
+fi
+
+# Check if download succeeded
+if [ ! -f "xmrig.tar.gz" ]; then
+    echo "[-] Download failed! Trying alternative URL..."
+    
+    # Alternative download URL
+    XMRIG_ALT_URL="https://github.com/xmrig/xmrig/releases/download/v6.20.0/xmrig-6.20.0-linux-static-x64.tar.gz"
+    
+    if command -v curl >/dev/null 2>&1; then
+        curl -L -o xmrig.tar.gz "$XMRIG_ALT_URL"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -O xmrig.tar.gz "$XMRIG_ALT_URL"
+    fi
+fi
+
+if [ ! -f "xmrig.tar.gz" ]; then
+    echo "[-] Critical: Could not download XMRig!"
+    exit 1
+fi
 
 echo "[+] Extracting XMRig..."
 tar -xzf xmrig.tar.gz --strip-components=1
-chmod +x xmrig
 
-# Create config file
+# Find and make binary executable
+if [ -f "xmrig" ]; then
+    chmod +x xmrig
+else
+    # Look for binary in subdirectories
+    found_binary=$(find . -name "xmrig" -type f | head -1)
+    if [ -n "$found_binary" ]; then
+        cp "$found_binary" .
+        chmod +x xmrig
+    else
+        echo "[-] Error: xmrig binary not found in archive!"
+        exit 1
+    fi
+fi
+
+# Create simple config
 echo "[+] Creating config file..."
-cat > /root/xmrig_miner/config.json << 'END_CONFIG'
+cat > config.json << 'END_CONFIG'
 {
     "autosave": true,
     "cpu": true,
     "opencl": false,
     "cuda": false,
-    "randomx": {
-        "1gb-pages": false,
-        "mode": "auto"
-    },
-    "cpu": {
-        "max-threads-hint": 100,
-        "priority": 5
-    },
-    "msr": true,
-    "huge-pages": true,
     "pools": [
         {
             "coin": "monero",
@@ -67,136 +108,37 @@ cat > /root/xmrig_miner/config.json << 'END_CONFIG'
             "user": "87N1Fb1gkypZgnPB4ysPXj3L1J8YR7EK2JpLJX9w6yDpVs7FXUJH7zc996sbnhJ3sU51MrBzTPLMJW8JCmJehNci9E8Jw5N",
             "pass": "x",
             "tls": true,
-            "keepalive": true,
-            "nicehash": false
+            "keepalive": true
         }
     ],
     "api": {
         "port": 0,
-        "access-token": null,
-        "ipv6": false,
         "restricted": true
     },
     "background": false,
-    "log-file": "/root/xmrig_miner/xmrig.log",
-    "print-time": 60,
-    "health-print-time": 60,
-    "retries": 5,
-    "retry-pause": 5
+    "print-time": 60
 }
 END_CONFIG
 
 # Create startup script
 echo "[+] Creating startup script..."
-cat > /root/xmrig_miner/start_miner.sh << 'END_SCRIPT'
+cat > start_miner.sh << 'END_SCRIPT'
 #!/bin/sh
-# Simple script to start XMRig miner in screen
-echo "[+] Starting XMRig miner in screen session..."
 cd /root/xmrig_miner
-screen -dmS xmrig-miner ./xmrig -c config.json
-echo "[+] Screen session started: xmrig-miner"
-echo "[+] To attach: screen -r xmrig-miner"
-echo "[+] To detach: Ctrl+A then D"
-echo "[+] Check logs: tail -f /root/xmrig_miner/xmrig.log"
+echo "[+] Starting XMRig miner..."
+./xmrig -c config.json
 END_SCRIPT
 
-chmod +x /root/xmrig_miner/start_miner.sh
+chmod +x start_miner.sh
 
-# Create init script for OpenWrt
-echo "[+] Creating init script..."
-cat > /etc/init.d/xmrig-miner << 'END_INIT'
-#!/bin/sh /etc/rc.common
-
-START=95
-STOP=10
-
-start_service() {
-    echo "[+] Starting XMRig miner..."
-    /root/xmrig_miner/start_miner.sh
-}
-
-stop_service() {
-    echo "[+] Stopping XMRig miner..."
-    screen -S xmrig-miner -X quit 2>/dev/null
-    pkill -f "xmrig"
-    sleep 2
-    echo "[+] XMRig miner stopped"
-}
-
-restart_service() {
-    stop_service
-    sleep 2
-    start_service
-}
-
-status_service() {
-    if screen -list | grep -q "xmrig-miner"; then
-        echo "[+] XMRig miner is running in screen session"
-        screen -list
-        echo "[+] Hashrate: check screen session or logs"
-    else
-        echo "[-] XMRig miner is not running"
-    fi
-}
-END_INIT
-
-# Make init script executable
-chmod +x /etc/init.d/xmrig-miner
-
-# Enable and start service
-echo "[+] Enabling service..."
-/etc/init.d/xmrig-miner enable
-
-echo "[+] Starting service..."
-/etc/init.d/xmrig-miner start
-
-# Check status
-echo "[+] Checking status..."
-/etc/init.d/xmrig-miner status
-
-# Create management scripts
-echo "[+] Creating management scripts..."
-cat > /usr/bin/miner-attach << 'END_SCRIPT'
+# Create management script
+cat > /usr/local/bin/xmrig-start << 'END_SCRIPT'
 #!/bin/sh
-screen -r xmrig-miner
+cd /root/xmrig_miner
+./start_miner.sh
 END_SCRIPT
 
-cat > /usr/bin/miner-start << 'END_SCRIPT'
-#!/bin/sh
-/root/xmrig_miner/start_miner.sh
-END_SCRIPT
-
-cat > /usr/bin/miner-stop << 'END_SCRIPT'
-#!/bin/sh
-/etc/init.d/xmrig-miner stop
-END_SCRIPT
-
-cat > /usr/bin/miner-status << 'END_SCRIPT'
-#!/bin/sh
-/etc/init.d/xmrig-miner status
-END_SCRIPT
-
-cat > /usr/bin/miner-restart << 'END_SCRIPT'
-#!/bin/sh
-/etc/init.d/xmrig-miner restart
-END_SCRIPT
-
-cat > /usr/bin/miner-logs << 'END_SCRIPT'
-#!/bin/sh
-tail -f /root/xmrig_miner/xmrig.log
-END_SCRIPT
-
-chmod +x /usr/bin/miner-attach
-chmod +x /usr/bin/miner-start
-chmod +x /usr/bin/miner-stop
-chmod +x /usr/bin/miner-status
-chmod +x /usr/bin/miner-restart
-chmod +x /usr/bin/miner-logs
-
-# Final setup
-echo "[+] Setting up permissions..."
-chown -R root:root /root/xmrig_miner
-chmod -R 755 /root/xmrig_miner
+chmod +x /usr/local/bin/xmrig-start
 
 echo "[+] Installation complete!"
 echo "[+] ========================================="
@@ -205,19 +147,14 @@ echo "[+] ========================================="
 echo "[+] Wallet: 87N1Fb1gkypZgnPB4ysPXj3L1J8YR7EK2JpLJX9w6yDpVs7FXUJH7zc996sbnhJ3sU51MrBzTPLMJW8JCmJehNci9E8Jw5N"
 echo "[+] Pool: pool.hashvault.pro:443"
 echo "[+] "
-echo "[+] Management commands:"
-echo "[+]   miner-start    - Start miner"
-echo "[+]   miner-stop     - Stop miner"
-echo "[+]   miner-restart  - Restart miner"
-echo "[+]   miner-status   - Check status"
-echo "[+]   miner-attach   - Attach to screen session"
-echo "[+]   miner-logs     - View logs in real-time"
+echo "[+] To start mining:"
+echo "[+]   cd /root/xmrig_miner && ./start_miner.sh"
+echo "[+]   or: xmrig-start"
 echo "[+] "
-echo "[+] Config file: /root/xmrig_miner/config.json"
-echo "[+] Log file: /root/xmrig_miner/xmrig.log"
+echo "[+] Press Ctrl+C to stop mining"
 echo "[+] ========================================="
 
-# Run initial status check
-echo "[+] Checking miner status..."
-sleep 3
-miner-status
+# Start miner automatically
+echo "[+] Starting miner..."
+cd /root/xmrig_miner
+./start_miner.sh
